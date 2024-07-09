@@ -229,12 +229,15 @@ end
 --- @param bufnr integer
 --- @param winid integer
 --- @return Range4[]?, string[]?
-function M.get(bufnr, winid)
+function M.get(bufnr, winid, height)
   if not pcall(vim.treesitter.get_parser, bufnr) then
     return
   end
 
   local max_lines = calc_max_lines(winid)
+  if height then
+    max_lines = height
+  end
 
   local top_row = fn.line('w0', winid) - 1
 
@@ -245,9 +248,10 @@ function M.get(bufnr, winid)
     row, col = top_row, 0
   else
     local c = api.nvim_win_get_cursor(winid)
+    if api.nvim_win_get_config(winid).zindex == 20 then
+    end
     row, col = c[1] - 1, c[2]
   end
-
   local context_ranges = {} --- @type Range4[]
   local context_lines = {} --- @type string[][]
   local contexts_height = 0

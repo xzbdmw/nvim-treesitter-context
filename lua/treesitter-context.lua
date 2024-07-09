@@ -1,4 +1,5 @@
 local api = vim.api
+local success, indent_mod = pcall(require, 'hlchunk.mods.indent')
 
 local config = require('treesitter-context.config')
 
@@ -56,8 +57,8 @@ end
 ---@param bufnr integer
 ---@param winid integer
 ---@return Range4[]?, string[]?
-local function get_context(bufnr, winid)
-  return require('treesitter-context.context').get(bufnr, winid)
+local function get_context(bufnr, winid, height)
+  return require('treesitter-context.context').get(bufnr, winid, height)
 end
 
 local attached = {} --- @type table<integer,true>
@@ -65,12 +66,16 @@ local attached = {} --- @type table<integer,true>
 ---@param bufnr integer
 ---@param winid integer
 local function can_open(bufnr, winid)
-  if not attached[bufnr] then
+  if not api.nvim_win_is_valid(winid) then
     return false
   end
 
-  if not api.nvim_win_is_valid(winid) then
-    return false
+  if vim.b[bufnr].ts_parse_over == true then
+    return true
+  end
+
+  if vim.b[bufnr].telescope == true then
+    return true
   end
 
   if not api.nvim_buf_is_valid(bufnr) then
@@ -100,33 +105,18 @@ local function can_open(bufnr, winid)
   return true
 end
 
---- @param bufnr integer
---- @param winid integer
-local update_instantly = function(bufnr, winid)
-  bufnr = bufnr or api.nvim_get_current_buf()
-  winid = winid or api.nvim_get_current_win()
-
-  if not can_open(bufnr, winid) then
-    close(winid)
-    return
-  end
-
-  local context, context_lines = get_context(bufnr, winid)
-  all_contexts[bufnr] = context
-
-  if not context or #context == 0 then
-    close(winid)
-    return
-  end
-
-  assert(context_lines)
-
-  open(bufnr, winid, context, context_lines)
-end
-
 local update = throttle(function()
+  vim.defer_fn(function()
+    pcall(_G.update_indent, true)
+  end, 100)
   local bufnr = api.nvim_get_current_buf()
   local winid = api.nvim_get_current_win()
+
+  local active_win_view = vim.fn.winsaveview()
+  local mode = vim.fn.mode()
+  if mode ~= 'n' and active_win_view.leftcol == 0 then
+    return
+  end
 
   if not can_open(bufnr, winid) then
     close(winid)
@@ -146,10 +136,115 @@ local update = throttle(function()
   open(bufnr, winid, context, context_lines)
 end)
 
+local function update_at_resize()
+  local event = vim.api.nvim_get_vvar('event')
+  local window_ids = event.windows
+  for stored_winid, window_context in
+    pairs(require('treesitter-context.render').get_window_contexts())
+  do
+    for _, window_id in pairs(window_ids) do
+      if stored_winid == window_id then
+        local bufnr = window_context.bufnr
+        close(stored_winid)
+
+        if not can_open(bufnr, stored_winid) then
+          return
+        end
+
+        local context, context_lines = get_context(bufnr, stored_winid)
+        all_contexts[bufnr] = context
+        if not context or #context == 0 then
+          return
+        end
+        open(bufnr, stored_winid, context, context_lines)
+      end
+    end
+  end
+end
+
+function close_stored_win(winid)
+  for stored_winid, _ in pairs(require('treesitter-context.render').get_window_contexts()) do
+    if winid == stored_winid then
+      close(stored_winid)
+    end
+  end
+end
+
 local M = {
   config = config,
 }
 
+M.context_force_update = function(bufnr, winid, close_all)
+  bufnr = bufnr or api.nvim_get_current_buf()
+  winid = winid or api.nvim_get_current_win()
+
+  local active_win_view = vim.fn.winsaveview()
+  local mode = vim.fn.mode()
+  if mode == 'i' and active_win_view.leftcol == 0 and vim.bo.filetype ~= 'TelescopePrompt' then
+    return
+  end
+  vim.defer_fn(function()
+    pcall(_G.update_indent, true, winid) -- hlchunk
+  end, 100)
+
+  -- conflict with trouble
+  if not close_all then
+    close(winid)
+  end
+
+  local context, context_lines = get_context(bufnr, winid)
+  all_contexts[bufnr] = context
+
+  if close_all then
+    local window_contexts = require('treesitter-context.render').get_window_contexts()
+    for stored_winid, _ in pairs(window_contexts) do
+      close(stored_winid)
+    end
+  end
+
+  if not context or #context == 0 then
+    close(winid)
+    return
+  end
+
+  assert(context_lines)
+
+  open(bufnr, winid, context, context_lines)
+  vim.api.nvim__redraw({ flush = true, valid = true })
+  -- vim.cmd('redraw')
+end
+
+M.update_virt = throttle(function()
+  local bufnr = api.nvim_get_current_buf()
+  local winid = api.nvim_get_current_win()
+  local mode = vim.fn.mode()
+  if mode ~= 'n' then
+    return
+  end
+  if not can_open(bufnr, winid) then
+    close(winid)
+    return
+  end
+
+  local context, context_lines = get_context(bufnr, winid)
+  all_contexts[bufnr] = context
+
+  if not context or #context == 0 then
+    close(winid)
+    return
+  end
+
+  assert(context_lines)
+
+  open(bufnr, winid, context, context_lines, true)
+end)
+
+function M.close_all()
+  local window_contexts = require('treesitter-context.render').get_window_contexts()
+  for winid, _ in pairs(window_contexts) do
+    close(winid)
+  end
+end
 local group = augroup('treesitter_context_update', {})
 
 ---@param event string|string[]
@@ -167,41 +262,22 @@ function M.enable()
 
   attached[cbuf] = true
 
-  autocmd({ 'BufEnter', 'WinScrolled', 'VimResized' }, update)
-  autocmd({ 'WinEnter' }, function(args)
-    local bufnr = tonumber(args.buf)
-    local winid = api.nvim_get_current_win()
-    vim.schedule(function()
-      update_instantly(bufnr, winid)
-    end)
+  autocmd({ 'WinScrolled', 'BufEnter', 'BufWinEnter', 'VimResized' }, function()
+    vim.defer_fn(update, 20)
   end)
 
-  autocmd({ 'WinResized' }, function()
-    local event = vim.api.nvim_get_vvar('event')
-    local window_ids = event.windows
-    for stored_winid, window_context in
-      pairs(require('treesitter-context.render').get_window_contexts())
-    do
-      for _, window_id in pairs(window_ids) do
-        if stored_winid == window_id then
-          local bufnr = window_context.bufnr
-          close(stored_winid)
+  -- autocmd({ 'BufEnter' }, function()
+  --   if vim.g.gd then
+  --     return
+  --   end
+  --   require('config.utils').real_enter(function()
+  --     require('treesitter-context').context_force_update()
+  --   end, function()
+  --     return true
+  --   end, 'treesitter-context force update')
+  -- end)
 
-          if not can_open(bufnr, stored_winid) then
-            return
-          end
-
-          local context, context_lines = get_context(bufnr, stored_winid)
-          all_contexts[bufnr] = context
-
-          if not context or #context == 0 then
-            return
-          end
-          open(bufnr, stored_winid, context, context_lines)
-        end
-      end
-    end
-  end)
+  autocmd({ 'WinResized' }, update_at_resize)
 
   autocmd('BufReadPost', function(args)
     attached[args.buf] = nil
@@ -213,9 +289,12 @@ function M.enable()
   autocmd('BufDelete', function(args)
     attached[args.buf] = nil
   end)
-
-  autocmd('CursorMoved', update)
-
+  autocmd('CursorMoved', function()
+    if vim.g.gd or vim.g.type_o then
+      return
+    end
+    vim.schedule(update)
+  end)
   autocmd('OptionSet', function(args)
     if args.match == 'number' or args.match == 'relativenumber' then
       update()
@@ -224,16 +303,10 @@ function M.enable()
 
   autocmd({ 'WinClosed' }, function(args)
     local winid = tonumber(args.match)
-    for stored_winid, _ in pairs(require('treesitter-context.render').get_window_contexts()) do
-      if winid == stored_winid then
-        close(stored_winid)
-      end
-    end
+    close_stored_win(winid)
   end)
 
-  autocmd('User', function()
-    close_all()
-  end, { pattern = 'SessionSavePre' })
+  autocmd('User', close_all, { pattern = 'SessionSavePre' })
   autocmd('User', update, { pattern = 'SessionSavePost' })
 
   update()
@@ -267,7 +340,11 @@ local function init()
   api.nvim_set_hl(0, 'TreesitterContext', { link = 'NormalFloat', default = true })
   api.nvim_set_hl(0, 'TreesitterContextLineNumber', { link = 'LineNr', default = true })
   api.nvim_set_hl(0, 'TreesitterContextBottom', { link = 'NONE', default = true })
-  api.nvim_set_hl(0, 'TreesitterContextLineNumberBottom', { link = 'TreesitterContextBottom', default = true })
+  api.nvim_set_hl(
+    0,
+    'TreesitterContextLineNumberBottom',
+    { link = 'TreesitterContextBottom', default = true }
+  )
   api.nvim_set_hl(0, 'TreesitterContextSeparator', { link = 'FloatBorder', default = true })
 end
 
@@ -294,6 +371,7 @@ end
 ---@param depth integer? default 1
 function M.go_to_context(depth)
   depth = depth or 1
+  local d = depth
   local line = api.nvim_win_get_cursor(0)[1]
   local context = nil
   local bufnr = api.nvim_get_current_buf()
@@ -301,21 +379,34 @@ function M.go_to_context(depth)
 
   for idx = #contexts, 1, -1 do
     local c = contexts[idx]
-    if depth == 0 then
+    if d == 0 then
       break
     end
     if c[1] + 1 < line then
       context = c
-      depth = depth - 1
+      d = d - 1
     end
   end
-
+  if depth == 0 then
+    context = contexts[1]
+  end
   if context == nil then
     return
   end
 
   vim.cmd([[ normal! m' ]]) -- add current cursor position to the jump list
   api.nvim_win_set_cursor(0, { context[1] + 1, context[2] })
+  local function is_space()
+    local v = vim.api
+    local win = v.nvim_get_current_win()
+    local byte_index = v.nvim_win_get_cursor(win)[2]
+    local line = v.nvim_get_current_line()
+    local char = string.sub(line, byte_index, byte_index)
+    return string.find(char, '%s') ~= nil
+  end
+  if not is_space() then
+    FeedKeys('w', 'n')
+  end
 end
 
 return M

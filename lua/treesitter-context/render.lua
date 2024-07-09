@@ -1,10 +1,150 @@
 local api, fn = vim.api, vim.fn
 local highlighter = vim.treesitter.highlighter
-
+local _, indent_mod = pcall(require, 'hlchunk.mods.indent')
 local util = require('treesitter-context.util')
 local config = require('treesitter-context.config')
 
 local ns = api.nvim_create_namespace('nvim-treesitter-context')
+local virt_text_ns = api.nvim_create_namespace('nvim-treesitter-context-virt-text')
+
+---Render virtual text in the context buffer, includes extmarks and diagnostics
+---@param cbufnr integer buf number of the context buffer
+---@param extmarks table result of `clone_extmarks_into()`
+---@param diagnostics table result of `clone_diagnostics_into()`
+local function render_virtual_text(cbufnr, extmarks)
+  api.nvim_buf_clear_namespace(cbufnr, virt_text_ns, 0, -1)
+  local len = api.nvim_buf_line_count(cbufnr)
+  for line = 0, len do
+    for _, m_info in ipairs(extmarks[line] or {}) do
+      local ns_id = m_info.opts['ns_id']
+      m_info.opts['id'] = ns_id
+      m_info.opts['ns_id'] = nil
+      local o = m_info.opts
+      if o.priority >= 199 then
+        o.end_row = line
+      end
+      if o.priority == 2 then
+        o.virt_text_pos = 'overlay'
+      end
+
+      local ok = pcall(api.nvim_buf_set_extmark, cbufnr, virt_text_ns, line, m_info.col, o)
+      -- if not ok then
+      --   -- __AUTO_GENERATED_PRINT_VAR_START__
+      --   print([==[render_virtual_text#for#for o:]==], vim.inspect(o)) -- __AUTO_GENERATED_PRINT_VAR_END__
+      --   -- __AUTO_GENERATED_PRINT_VAR_START__
+      --   print([==[render_virtual_text#for#for m_info.col:]==], vim.inspect(m_info.col)) -- __AUTO_GENERATED_PRINT_VAR_END__
+      --   -- __AUTO_GENERATED_PRINT_VAR_START__
+      --   print([==[render_virtual_text#for#for line - 1:]==], vim.inspect(line - 1)) -- __AUTO_GENERATED_PRINT_VAR_END__
+      --   -- __AUTO_GENERATED_PRINT_VAR_START__
+      --   print([==[render_virtual_text#for#for origin line :]==], vim.inspect(o.line)) -- __AUTO_GENERATED_PRINT_VAR_END__
+      --   -- __AUTO_GENERATED_PRINT_VAR_START__
+      --   print([==[render_virtual_text#for#for virt_text_ns:]==], vim.inspect(virt_text_ns)) -- __AUTO_GENERATED_PRINT_VAR_END__
+      --   -- __AUTO_GENERATED_PRINT_VAR_START__
+      --   print([==[render_virtual_text#for#for cbufnr:]==], vim.inspect(cbufnr)) -- __AUTO_GENERATED_PRINT_VAR_END__
+      -- end
+    end
+  end
+
+  -- this is a hack b/c the diagnostic virtual text isn't accessible through nvim_buf_get_extmarks
+  -- vim.diagnostic.handlers.virtual_text.hide(virt_text_ns, cbufnr)
+  -- vim.diagnostic.handlers.virtual_text.show(virt_text_ns, cbufnr, diagnostics)
+end
+
+vim.keymap.set('n', '<leader>zh', function()
+  local line = 58
+  for name, n in pairs(api.nvim_get_namespaces()) do
+    -- __AUTO_GENERATED_PRINT_VAR_START__
+    print([==[function#for name:]==], vim.inspect(name)) -- __AUTO_GENERATED_PRINT_VAR_END__
+    -- __AUTO_GENERATED_PRINT_VAR_START__
+    print([==[function#for n:]==], vim.inspect(n)) -- __AUTO_GENERATED_PRINT_VAR_END__
+    local ext_marks = api.nvim_buf_get_extmarks(0, n, { line, 0 }, { line, -1 }, { details = true })
+    -- __AUTO_GENERATED_PRINT_VAR_START__
+    print([==[function#for ext_marks:]==], vim.inspect(ext_marks)) -- __AUTO_GENERATED_PRINT_VAR_END__
+    for _, extmark in ipairs(ext_marks) do
+      local extmark_id, extmark_row, col, info = unpack(extmark)
+      -- __AUTO_GENERATED_PRINT_VAR_START__
+      print([==[function#for#for info:]==], vim.inspect(info)) -- __AUTO_GENERATED_PRINT_VAR_END__
+      if col ~= nil and info.end_col ~= nil then
+        local test = vim.api.nvim_buf_get_text(0, line, col, line, info.end_col, {})
+      end
+    end
+  end
+end)
+vim.keymap.set('n', '<leader>zl', function()
+  -- {
+  --   end_col = 106,
+  --   end_right_gravity = false,
+  --   end_row = 43,
+  --   hl_eol = false,
+  --   hl_group = "TodoFgVAR",
+  --   ns_id = 25,
+  --   priority = 4096,
+  --   right_gravity = true
+  -- }{
+  --   hl_mode = "combine",
+  --   ns_id = 24,
+  --   priority = 2,
+  --   right_gravity = false,
+  --   virt_text = { { "│", "MiniIndentscopeSymbol" } },
+  --   virt_text_hide = false,
+  --   virt_text_pos = "win_col",
+  --   virt_text_repeat_linebreak = false,
+  --   virt_text_win_col = 4
+  -- }
+  local test_text_ns = vim.api.nvim_create_namespace('asdasd')
+  api.nvim_buf_set_extmark(0, test_text_ns, 3, 4, {
+    hl_mode = 'combine',
+    id = 24,
+    priority = 2,
+    right_gravity = false,
+    virt_text = { { '│', 'MiniIndentscopeSymbol' } },
+    virt_text_hide = false,
+    virt_text_pos = 'win_col',
+    virt_text_repeat_linebreak = false,
+    virt_text_win_col = 4,
+  })
+end)
+
+---Clone existing, namespaced, extmarks present in the given range, and insert them into extmarks
+---@param extmarks table from line number to list of extmarks on that line
+---@param bufnr integer buffer number we're searching for ext marks
+---@param range table<integer> { start_row, start_col, end_row, end_col }
+---@param context_line_num integer the line in the context that this should be associated with
+local function clone_extmarks_into(extmarks, bufnr, range, context_line_num)
+  if range == nil then
+    return
+  end
+  for name, n in pairs(api.nvim_get_namespaces()) do
+    if name == 'illuminate.highlight' or name == 'illuminate.highlightkeep' then
+      local found_extmarks = api.nvim_buf_get_extmarks(
+        bufnr,
+        n,
+        { range[1], range[2] },
+        { range[3], range[4] },
+        { details = true }
+      )
+      for _, e in pairs(found_extmarks) do
+        if extmarks[context_line_num] == nil then
+          extmarks[context_line_num] = {}
+        end
+        table.insert(extmarks[context_line_num], { col = e[3], opts = e[4], line = range[1] })
+      end
+    end
+  end
+end
+
+---Clone existing diagnostic info from the given line
+---@param diagnostics table from line number to list of diagnostics on that line
+---@param bufnr integer buffer to find diagnostics in
+---@param line integer line to copy diagnostics from
+---@param context_line_num integer corresponding context buf line number
+local function clone_diagnostics_into(diagnostics, bufnr, line, context_line_num)
+  for _, d in ipairs(vim.diagnostic.get(bufnr, { lnum = line })) do
+    local copy = vim.deepcopy(d)
+    copy.lnum = context_line_num
+    table.insert(diagnostics, copy)
+  end
+end
 
 --- @class WindowContext
 --- @field bufnr integer The buffer number
@@ -15,7 +155,7 @@ local ns = api.nvim_create_namespace('nvim-treesitter-context')
 local WindowContext = {}
 WindowContext.__index = WindowContext
 
-local windowContexts = {} --- @type table<integer, WindowContext>
+local window_contexts = {} --- @type table<integer, WindowContext>
 
 --- @param winid integer?
 local function win_close(winid)
@@ -30,17 +170,16 @@ end
 --- @param winid integer
 --- @return WindowContext
 local function store_context(bufnr, winid)
-  local window_ctx = windowContexts[winid]
+  local window_ctx = window_contexts[winid]
   if window_ctx then
     if window_ctx.bufnr == bufnr then
       return window_ctx
     else
-      -- Unserline buffer have changed, close it
+      -- Underline buffer have changed, close it
       win_close(window_ctx.context_winid)
       win_close(window_ctx.gutter_winid)
     end
   end
-
   local self = setmetatable({
     bufnr = bufnr,
     gutter_bufnr = api.nvim_create_buf(false, true),
@@ -48,15 +187,15 @@ local function store_context(bufnr, winid)
     gutter_winid = nil,
     context_winid = nil,
   }, WindowContext)
-
   vim.bo[self.context_bufnr].undolevels = -1
   vim.bo[self.context_bufnr].bufhidden = 'wipe'
   vim.bo[self.gutter_bufnr].undolevels = -1
   vim.bo[self.gutter_bufnr].bufhidden = 'wipe'
-  windowContexts[winid] = self
+  window_contexts[winid] = self
   return self
 end
 
+local i = 1
 --- @param bufnr integer
 --- @param winid integer
 --- @param float_winid integer?
@@ -67,6 +206,7 @@ end
 --- @param hl string
 --- @return integer
 local function display_window(bufnr, winid, float_winid, width, height, col, ty, hl)
+  i = i + 1
   if not float_winid or not api.nvim_win_is_valid(float_winid) then
     local sep = config.separator and { config.separator, 'TreesitterContextSeparator' } or nil
     float_winid = api.nvim_open_win(bufnr, false, {
@@ -90,6 +230,7 @@ local function display_window(bufnr, winid, float_winid, width, height, col, ty,
     api.nvim_win_set_config(float_winid, {
       win = winid,
       relative = 'win',
+      zindex = config.zindex,
       width = width,
       height = height,
       row = 0,
@@ -103,6 +244,7 @@ end
 --- @return integer
 local function get_gutter_width(winid)
   return fn.getwininfo(winid)[1].textoff
+  -- return 8
 end
 
 ---@param name string
@@ -172,8 +314,12 @@ local function highlight_contexts(bufnr, ctx_bufnr, contexts)
         if nsrow >= start_row then
           local msrow = offset + (nsrow - start_row)
           local merow = offset + (nerow - start_row)
-
-          local hl = buf_query.hl_cache[capture]
+          local hl --- @type integer
+          if buf_query.get_hl_from_capture then
+            hl = buf_query:get_hl_from_capture(capture)
+          else
+            hl = buf_query.hl_cache[capture]
+          end
           local priority = tonumber(metadata.priority) or vim.highlight.priorities.treesitter
           add_extmark(ctx_bufnr, msrow, nscol, {
             end_row = merow,
@@ -204,8 +350,8 @@ end
 
 --- @param ctx_node_line_num integer
 --- @return integer
-local function get_relative_line_num(ctx_node_line_num)
-  local cursor_line_num = fn.line('.')
+local function get_relative_line_num(ctx_node_line_num, win)
+  local cursor_line_num = fn.line('.', win)
   local num_folded_lines = 0
   -- Find all folds between the context node and the cursor
   local current_line = ctx_node_line_num
@@ -233,7 +379,7 @@ local function build_lno_str(win, lnum, width)
       winid = win,
       use_statuscol_lnum = lnum,
       highlights = true,
-      fillchar = ' ',  -- Fixed in Neovim 0.10 (#396)
+      fillchar = ' ', -- Fixed in Neovim 0.10 (#396)
     })
     if ok then
       return data.str, data.highlights
@@ -241,7 +387,7 @@ local function build_lno_str(win, lnum, width)
   end
   local relnum --- @type integer?
   if vim.wo[win].relativenumber then
-    relnum = get_relative_line_num(lnum)
+    relnum = get_relative_line_num(lnum, win)
   end
   return string.format('%' .. width .. 'd', relnum or lnum)
 end
@@ -321,6 +467,23 @@ local function render_lno(win, bufnr, contexts, gutter_width)
   highlight_bottom(bufnr, #lno_text - 1, 'TreesitterContextLineNumberBottom')
 end
 
+-- vim.keymap.set('n', '<leader>vds', function()
+--   local success, render = pcall(require, 'treesitter-context.render')
+--   if success then
+--     local win = vim.api.nvim_get_current_win()
+--     for stored_winid, window_context in pairs(render.get_window_contexts()) do
+--       if stored_winid == win then
+--         local context_winid = window_context.context_winid
+--         local active_win_view = fn.winsaveview()
+--         local context_win_view = api.nvim_win_call(context_winid, fn.winsaveview)
+--         if active_win_view.leftcol ~= context_win_view.leftcol then
+--           pcall(clear_context_indent)
+--         end
+--       end
+--     end
+--   end
+-- end)
+
 --- @param context_winid integer
 local function horizontal_scroll_contexts(context_winid)
   if context_winid == nil then
@@ -333,20 +496,21 @@ local function horizontal_scroll_contexts(context_winid)
     api.nvim_win_call(context_winid, function()
       return fn.winrestview({ leftcol = context_win_view.leftcol })
     end)
+    pcall(_G.update_indent, true)
   end
 end
 
 local M = {}
 
 function M.get_window_contexts()
-  return windowContexts
+  return window_contexts
 end
 
 --- @param bufnr integer
 --- @param winid integer
 --- @param ctx_ranges Range4[]
 --- @param ctx_lines string[]
-function M.open(bufnr, winid, ctx_ranges, ctx_lines)
+function M.open(bufnr, winid, ctx_ranges, ctx_lines, show_virt)
   local gutter_width = get_gutter_width(winid)
   local win_width = math.max(1, api.nvim_win_get_width(winid) - gutter_width)
   local win_height = #ctx_lines
@@ -354,7 +518,23 @@ function M.open(bufnr, winid, ctx_ranges, ctx_lines)
   local window_context = store_context(bufnr, winid)
   local gbufnr, ctx_bufnr = window_context.gutter_bufnr, window_context.context_bufnr
 
+  if show_virt then
+    if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_valid(ctx_bufnr) then
+      return
+    end
+    local extmarks = {}
+    for i, _ in ipairs(ctx_lines) do
+      clone_extmarks_into(extmarks, bufnr, ctx_ranges[i], i - 1)
+    end
+    render_virtual_text(ctx_bufnr, extmarks)
+    return
+  end
   if config.line_numbers and (vim.wo[winid].number or vim.wo[winid].relativenumber) then
+    -- Recreate buffer if user turn off line numbers and show it again
+    if not api.nvim_buf_is_valid(gbufnr) then
+      window_contexts[winid].gutter_bufnr = api.nvim_create_buf(false, true)
+      gbufnr = window_contexts[winid].gutter_bufnr
+    end
     window_context.gutter_winid = display_window(
       gbufnr,
       winid,
@@ -370,6 +550,11 @@ function M.open(bufnr, winid, ctx_ranges, ctx_lines)
     win_close(window_context.gutter_winid)
   end
 
+  -- Recreate buffer if user accidentally close ctx buffer
+  if not api.nvim_buf_is_valid(ctx_bufnr) then
+    window_contexts[winid].context_bufnr = api.nvim_create_buf(false, true)
+    ctx_bufnr = window_contexts[winid].context_bufnr
+  end
   window_context.context_winid = display_window(
     ctx_bufnr,
     winid,
@@ -380,15 +565,14 @@ function M.open(bufnr, winid, ctx_ranges, ctx_lines)
     'treesitter_context',
     'TreesitterContext'
   )
-
+  horizontal_scroll_contexts(window_context.context_winid)
   if not set_lines(ctx_bufnr, ctx_lines) then
     -- Context didn't change, can return here
     return
   end
-
+  require('guess-indent').set_from_buffer('context', ctx_bufnr)
   highlight_contexts(bufnr, ctx_bufnr, ctx_ranges)
   highlight_bottom(ctx_bufnr, win_height - 1, 'TreesitterContextBottom')
-  horizontal_scroll_contexts(window_context.context_winid)
 end
 
 --- @param winid integer
@@ -398,7 +582,7 @@ function M.close(winid)
     return
   end
 
-  local window_context = windowContexts[winid]
+  local window_context = window_contexts[winid]
   if window_context == nil then
     return
   end
@@ -408,7 +592,7 @@ function M.close(winid)
 
   win_close(gutter_winid)
 
-  windowContexts[winid] = nil
+  window_contexts[winid] = nil
 end
 
 return M
