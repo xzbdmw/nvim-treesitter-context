@@ -66,7 +66,7 @@ local attached = {} --- @type table<integer,true>
 ---@param bufnr integer
 ---@param winid integer
 local function can_open(bufnr, winid)
-  if not api.nvim_win_is_valid(winid) then
+  if (not api.nvim_win_is_valid(winid)) or (not vim.api.nvim_buf_is_valid(bufnr)) then
     return false
   end
 
