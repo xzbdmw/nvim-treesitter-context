@@ -519,17 +519,8 @@ function M.get_window_contexts()
 end
 
 --- @param bufnr integer
---- @param winid integer
---- @param ctx_ranges Range4[]
 --- @param ctx_lines string[]
-function M.open(bufnr, winid, ctx_ranges, ctx_lines, show_virt)
-  local gutter_width = get_gutter_width(winid)
-  local win_width = math.max(1, api.nvim_win_get_width(winid) - gutter_width)
-  local win_height = #ctx_lines
-
-  local window_context = store_context(bufnr, winid)
-  local gbufnr, ctx_bufnr = window_context.gutter_bufnr, window_context.context_bufnr
-
+local function illuminate_extmark(bufnr, ctx_bufnr, ctx_lines, ctx_ranges, show_virt)
   if show_virt then
     if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_valid(ctx_bufnr) then
       return
@@ -541,6 +532,21 @@ function M.open(bufnr, winid, ctx_ranges, ctx_lines, show_virt)
     render_virtual_text(ctx_bufnr, extmarks)
     return
   end
+end
+
+--- @param bufnr integer
+--- @param winid integer
+--- @param ctx_ranges Range4[]
+--- @param ctx_lines string[]
+function M.open(bufnr, winid, ctx_ranges, ctx_lines, show_virt)
+  local gutter_width = get_gutter_width(winid)
+  local win_width = math.max(1, api.nvim_win_get_width(winid) - gutter_width)
+  local win_height = #ctx_lines
+
+  local window_context = store_context(bufnr, winid)
+  local gbufnr, ctx_bufnr = window_context.gutter_bufnr, window_context.context_bufnr
+
+  illuminate_extmark(bufnr, ctx_bufnr, ctx_lines, ctx_ranges, show_virt)
   if config.line_numbers and (vim.wo[winid].number or vim.wo[winid].relativenumber) then
     -- Recreate buffer if user turn off line numbers and show it again
     if not api.nvim_buf_is_valid(gbufnr) then
