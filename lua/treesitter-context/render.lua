@@ -195,7 +195,6 @@ local function store_context(bufnr, winid)
   return self
 end
 
-local i = 1
 --- @param bufnr integer
 --- @param winid integer
 --- @param float_winid integer?
@@ -206,7 +205,6 @@ local i = 1
 --- @param hl string
 --- @return integer
 local function display_window(bufnr, winid, float_winid, width, height, col, ty, hl)
-  i = i + 1
   if not float_winid or not api.nvim_win_is_valid(float_winid) then
     local sep = config.separator and { config.separator, 'TreesitterContextSeparator' } or nil
     float_winid = api.nvim_open_win(bufnr, false, {
@@ -226,6 +224,9 @@ local function display_window(bufnr, winid, float_winid, width, height, col, ty,
     vim.wo[float_winid].wrap = false
     vim.wo[float_winid].foldenable = false
     vim.wo[float_winid].winhl = 'NormalFloat:' .. hl
+    if vim.fn.getcmdline() ~= '' then
+      vim.api.nvim__redraw({ flush = true, valid = true })
+    end
   else
     api.nvim_win_set_config(float_winid, {
       win = winid,
@@ -236,6 +237,9 @@ local function display_window(bufnr, winid, float_winid, width, height, col, ty,
       row = 0,
       col = col,
     })
+      if vim.fn.getcmdline() ~= '' then
+        vim.api.nvim__redraw({ flush = true, valid = true })
+      end
   end
   return float_winid
 end
