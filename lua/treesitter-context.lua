@@ -234,8 +234,6 @@ M.context_force_update = function(bufnr, winid, close_all)
   assert(context_lines)
 
   open(bufnr, winid, context, context_lines)
-  vim.api.nvim__redraw({ flush = true, valid = true })
-  -- vim.cmd('redraw')
 end
 
 M.update_virt = throttle(function()
@@ -260,7 +258,7 @@ M.update_virt = throttle(function()
 
   assert(context_lines)
 
-  open(bufnr, winid, context, context_lines, true)
+  open(bufnr, winid, context, context_lines)
 end)
 
 function M.close_all()
