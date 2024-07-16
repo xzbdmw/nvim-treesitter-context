@@ -174,6 +174,30 @@ local M = {
   config = config,
 }
 
+-- do not close window, it cuase too many reopen so filckers
+M.context_hlslens_force_update = function(bufnr, winid)
+  bufnr = bufnr or api.nvim_get_current_buf()
+  winid = winid or api.nvim_get_current_win()
+
+  local active_win_view = vim.fn.winsaveview()
+  local mode = vim.fn.mode()
+  if mode == 'i' and active_win_view.leftcol == 0 and vim.bo.filetype ~= 'TelescopePrompt' then
+    return
+  end
+
+  local context, context_lines = get_context(bufnr, winid)
+  all_contexts[bufnr] = context
+
+  if not context or #context == 0 then
+    close(winid)
+    return
+  end
+
+  assert(context_lines)
+
+  open(bufnr, winid, context, context_lines)
+end
+
 M.context_force_update = function(bufnr, winid, close_all)
   bufnr = bufnr or api.nvim_get_current_buf()
   winid = winid or api.nvim_get_current_win()
