@@ -233,6 +233,9 @@ function M.get(bufnr, winid, height)
   if not pcall(vim.treesitter.get_parser, bufnr) then
     return
   end
+  if not api.nvim_win_is_valid(winid) then
+    return
+  end
 
   local max_lines = calc_max_lines(winid)
   if height then
