@@ -70,6 +70,10 @@ local function can_open(bufnr, winid)
     return false
   end
 
+  if vim.b[bufnr].gitsigns_preview == true then
+    return false
+  end
+
   if vim.b[bufnr].ts_parse_over == true then
     return true
   end
