@@ -228,18 +228,26 @@ local function display_window(bufnr, winid, float_winid, width, height, col, ty,
       vim.api.nvim__redraw({ flush = true, valid = true })
     end
   else
-    api.nvim_win_set_config(float_winid, {
-      win = winid,
-      relative = 'win',
-      zindex = config.zindex,
-      width = width,
-      height = height,
-      row = 0,
-      col = col,
-    })
+    local winconfig = api.nvim_win_get_config(float_winid)
+    if
+      winconfig.height ~= height
+      or winconfig.win ~= winid
+      or winconfig.col ~= col
+      or winconfig.width ~= width
+    then
+      api.nvim_win_set_config(float_winid, {
+        win = winid,
+        relative = 'win',
+        zindex = config.zindex,
+        width = width,
+        height = height,
+        row = 0,
+        col = col,
+      })
       if vim.fn.getcmdline() ~= '' then
         vim.api.nvim__redraw({ flush = true, valid = true })
       end
+    end
   end
   return float_winid
 end
