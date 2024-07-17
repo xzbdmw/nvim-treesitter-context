@@ -170,6 +170,15 @@ local M = {
   config = config,
 }
 
+function M.has_buf_active(bufnr)
+  for stored_winid, value in pairs(require('treesitter-context.render').get_window_contexts()) do
+    if bufnr == value.bufnr then
+      return true
+    end
+  end
+  return false
+end
+
 function M.close_stored_win(winid)
   for stored_winid, _ in pairs(require('treesitter-context.render').get_window_contexts()) do
     if winid == stored_winid then
@@ -291,16 +300,12 @@ function M.enable()
     vim.defer_fn(update, 20)
   end)
 
-  -- autocmd({ 'BufEnter' }, function()
-  --   if vim.g.gd then
-  --     return
-  --   end
-  --   require('config.utils').real_enter(function()
-  --     require('treesitter-context').context_force_update()
-  --   end, function()
-  --     return true
-  --   end, 'treesitter-context force update')
-  -- end)
+  autocmd({ 'BufEnter' }, function()
+    local win = api.nvim_get_current_win()
+    if not M.has_buf_active(win) then
+      M.close_stored_win(win)
+    end
+  end)
 
   autocmd({ 'WinResized' }, update_at_resize)
 
