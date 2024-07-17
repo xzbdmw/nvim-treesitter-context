@@ -166,18 +166,17 @@ local function update_at_resize()
   end
 end
 
-function close_stored_win(winid)
+local M = {
+  config = config,
+}
+
+function M.close_stored_win(winid)
   for stored_winid, _ in pairs(require('treesitter-context.render').get_window_contexts()) do
     if winid == stored_winid then
       close(stored_winid)
     end
   end
 end
-
-local M = {
-  config = config,
-}
-
 -- do not close window, it cuase too many reopen so filckers
 M.context_hlslens_force_update = function(bufnr, winid)
   bufnr = bufnr or api.nvim_get_current_buf()
@@ -329,7 +328,7 @@ function M.enable()
 
   autocmd({ 'WinClosed' }, function(args)
     local winid = tonumber(args.match)
-    close_stored_win(winid)
+    M.close_stored_win(winid)
   end)
 
   autocmd('User', close_all, { pattern = 'SessionSavePre' })
