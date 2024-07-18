@@ -300,12 +300,12 @@ function M.enable()
     vim.defer_fn(update, 20)
   end)
 
-  autocmd({ 'BufEnter' }, function()
-    local win = api.nvim_get_current_win()
-    if not M.has_buf_active(win) then
-      M.close_stored_win(win)
-    end
-  end)
+  -- autocmd({ 'BufEnter' }, function()
+  --   local win = api.nvim_get_current_win()
+  --   if not M.has_buf_active(win) then
+  --     M.close_stored_win(win)
+  --   end
+  -- end)
 
   autocmd({ 'WinResized' }, update_at_resize)
 
