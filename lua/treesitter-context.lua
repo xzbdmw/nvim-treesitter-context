@@ -122,6 +122,10 @@ local update = throttle(function()
     return
   end
 
+  if vim.g.type_star then
+    return
+  end
+
   if not can_open(bufnr, winid) then
     close(winid)
     return
