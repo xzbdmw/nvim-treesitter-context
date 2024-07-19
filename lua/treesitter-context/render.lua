@@ -85,12 +85,19 @@ WindowContext.__index = WindowContext
 local window_contexts = {} --- @type table<integer, WindowContext>
 
 --- @param winid integer?
-local function win_close(winid)
-  vim.schedule(function()
+--- @param fast boolean?
+local function win_close(winid, fast)
+  if not fast then
+    vim.schedule(function()
+      if winid ~= nil and api.nvim_win_is_valid(winid) then
+        api.nvim_win_close(winid, true)
+      end
+    end)
+  else
     if winid ~= nil and api.nvim_win_is_valid(winid) then
       api.nvim_win_close(winid, true)
     end
-  end)
+  end
 end
 
 --- @param bufnr integer
@@ -521,7 +528,8 @@ function M.open(bufnr, winid, ctx_ranges, ctx_lines, show_virt)
 end
 
 --- @param winid integer
-function M.close(winid)
+--- @param fast boolean?
+function M.close(winid, fast)
   -- Can't close other windows when the command-line window is open
   if fn.getcmdwintype() ~= '' then
     return
@@ -533,9 +541,9 @@ function M.close(winid)
   end
   local context_winid, gutter_winid = window_context.context_winid, window_context.gutter_winid
 
-  win_close(context_winid)
+  win_close(context_winid, fast)
 
-  win_close(gutter_winid)
+  win_close(gutter_winid, fast)
 
   window_contexts[winid] = nil
 end

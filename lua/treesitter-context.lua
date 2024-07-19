@@ -35,8 +35,9 @@ local function throttle(f, ms)
 end
 
 --- @param winid integer
-local function close(winid)
-  require('treesitter-context.render').close(winid)
+--- @param fast boolean?
+local function close(winid, fast)
+  require('treesitter-context.render').close(winid, fast)
 end
 
 local function close_all()
@@ -186,10 +187,11 @@ end
 function M.close_stored_win(winid)
   for stored_winid, _ in pairs(require('treesitter-context.render').get_window_contexts()) do
     if winid == stored_winid then
-      close(stored_winid)
+      close(stored_winid, true)
     end
   end
 end
+
 -- do not close window, it cuase too many reopen so filckers
 M.context_hlslens_force_update = function(bufnr, winid)
   bufnr = bufnr or api.nvim_get_current_buf()
@@ -304,12 +306,12 @@ function M.enable()
     vim.defer_fn(update, 20)
   end)
 
-  -- autocmd({ 'BufEnter' }, function()
-  --   local win = api.nvim_get_current_win()
-  --   if not M.has_buf_active(win) then
-  --     M.close_stored_win(win)
-  --   end
-  -- end)
+  autocmd({ 'BufEnter' }, function(args)
+    local win = api.nvim_get_current_win()
+    if not vim.b.ts_parse_over then
+      M.close_stored_win(win)
+    end
+  end)
 
   autocmd({ 'WinResized' }, update_at_resize)
 
