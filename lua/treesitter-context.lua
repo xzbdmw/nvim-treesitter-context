@@ -318,7 +318,9 @@ function M.enable()
   end)
 
   autocmd({ 'BufEnter' }, function(args)
-    M.close_cur_win()
+    vim.defer_fn(function()
+      M.close_cur_win()
+    end, 20)
   end)
 
   autocmd({ 'WinResized' }, update_at_resize)
