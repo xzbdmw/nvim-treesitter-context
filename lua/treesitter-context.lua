@@ -184,6 +184,17 @@ function M.has_buf_active(bufnr)
   return false
 end
 
+function M.close_cur_win()
+  local winid = vim.api.nvim_get_current_win()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local window_ctx = require('treesitter-context.render').get_window_contexts()[winid]
+  if window_ctx then
+    if window_ctx.bufnr ~= bufnr then
+      close(winid, true)
+    end
+  end
+end
+
 function M.close_stored_win(winid)
   for stored_winid, _ in pairs(require('treesitter-context.render').get_window_contexts()) do
     if winid == stored_winid then
@@ -307,10 +318,7 @@ function M.enable()
   end)
 
   autocmd({ 'BufEnter' }, function(args)
-    local win = api.nvim_get_current_win()
-    if not vim.b.ts_parse_over then
-      M.close_stored_win(win)
-    end
+    M.close_cur_win()
   end)
 
   autocmd({ 'WinResized' }, update_at_resize)
