@@ -71,7 +71,7 @@ local function can_open(bufnr, winid)
     return false
   end
 
-  if vim.b[bufnr].gitsigns_preview == true then
+  if vim.w[winid].gitsigns_preview then
     return false
   end
 
@@ -217,6 +217,10 @@ M.context_hlslens_force_update = function(bufnr, winid)
   local context, context_lines = get_context(bufnr, winid)
   all_contexts[bufnr] = context
 
+  if not can_open(bufnr, winid) then
+    close(winid)
+    return
+  end
   if not context or #context == 0 then
     close(winid)
     return
@@ -239,6 +243,11 @@ M.context_force_update = function(bufnr, winid, close_all)
   vim.defer_fn(function()
     pcall(_G.update_indent, true, winid) -- hlchunk
   end, 100)
+
+  if not can_open(bufnr, winid) then
+    close(winid)
+    return
+  end
 
   -- conflict with trouble
   if not close_all then
@@ -317,11 +326,7 @@ function M.enable()
     vim.defer_fn(update, 20)
   end)
 
-  autocmd({ 'BufEnter' }, function(args)
-    vim.defer_fn(function()
-      M.close_cur_win()
-    end, 20)
-  end)
+  autocmd({ 'BufEnter' }, M.close_cur_win)
 
   autocmd({ 'WinResized' }, update_at_resize)
 
@@ -443,11 +448,9 @@ function M.go_to_context(depth)
   vim.cmd([[ normal! m' ]]) -- add current cursor position to the jump list
   api.nvim_win_set_cursor(0, { context[1] + 1, context[2] })
   local function is_space()
-    local v = vim.api
-    local win = v.nvim_get_current_win()
-    local byte_index = v.nvim_win_get_cursor(win)[2]
-    local line = v.nvim_get_current_line()
-    local char = string.sub(line, byte_index, byte_index)
+    local win = api.nvim_get_current_win()
+    local byte_index = api.nvim_win_get_cursor(win)[2]
+    local char = string.sub(api.nvim_get_current_line(), byte_index, byte_index)
     return string.find(char, '%s') ~= nil
   end
   if not is_space() then
