@@ -446,16 +446,9 @@ function M.go_to_context(depth)
   end
 
   vim.cmd([[ normal! m' ]]) -- add current cursor position to the jump list
-  api.nvim_win_set_cursor(0, { context[1] + 1, context[2] })
-  local function is_space()
-    local win = api.nvim_get_current_win()
-    local byte_index = api.nvim_win_get_cursor(win)[2]
-    local char = string.sub(api.nvim_get_current_line(), byte_index, byte_index)
-    return string.find(char, '%s') ~= nil
-  end
-  if not is_space() then
-    FeedKeys('w', 'n')
-  end
+
+  local a, col = vim.fn.getline(context[1] + 1):find('^%s*')
+  api.nvim_win_set_cursor(0, { context[1] + 1, col })
 end
 
 return M
