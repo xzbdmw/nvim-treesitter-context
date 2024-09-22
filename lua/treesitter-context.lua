@@ -154,7 +154,7 @@ local function update_at_resize()
     for _, window_id in pairs(window_ids) do
       if stored_winid == window_id then
         local bufnr = window_context.bufnr
-        -- close(stored_winid)
+        close(stored_winid)
 
         if not can_open(bufnr, stored_winid) then
           return
