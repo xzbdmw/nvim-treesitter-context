@@ -51,10 +51,11 @@ local function clone_extmarks_into(extmarks, bufnr, range, context_line_num)
         { details = true }
       )
       for _, e in pairs(found_extmarks) do
-        if extmarks[context_line_num] == nil then
-          extmarks[context_line_num] = {}
+        local l = e[2] - range[1] + context_line_num
+        if extmarks[l] == nil then
+          extmarks[l] = {}
         end
-        table.insert(extmarks[context_line_num], { col = e[3], opts = e[4], line = range[1] })
+        table.insert(extmarks[l], { col = e[3], opts = e[4], line = l })
       end
     end
   end
