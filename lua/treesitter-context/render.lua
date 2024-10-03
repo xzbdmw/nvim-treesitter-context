@@ -140,6 +140,7 @@ end
 --- @param hl string
 --- @return integer
 local function display_window(bufnr, winid, float_winid, width, height, col, ty, hl)
+  local zindex = api.nvim_win_get_config(winid).relative ~= '' and 100 or config.zindex
   if not float_winid or not api.nvim_win_is_valid(float_winid) then
     local sep = config.separator and { config.separator, 'TreesitterContextSeparator' } or nil
     float_winid = api.nvim_open_win(bufnr, false, {
@@ -152,7 +153,7 @@ local function display_window(bufnr, winid, float_winid, width, height, col, ty,
       focusable = false,
       style = 'minimal',
       noautocmd = true,
-      zindex = config.zindex,
+      zindex = zindex,
       border = sep and { '', '', '', '', sep, sep, sep, '' } or nil,
     })
     vim.w[float_winid][ty] = true
@@ -173,7 +174,7 @@ local function display_window(bufnr, winid, float_winid, width, height, col, ty,
       api.nvim_win_set_config(float_winid, {
         win = winid,
         relative = 'win',
-        zindex = config.zindex,
+        zindex = zindex,
         width = width,
         height = height,
         row = 0,
@@ -461,8 +462,10 @@ local function illuminate_extmark(bufnr, ctx_bufnr, ctx_lines, ctx_ranges, show_
       return
     end
     local extmarks = {}
-    for i, _ in ipairs(ctx_lines) do
-      clone_extmarks_into(extmarks, bufnr, ctx_ranges[i], i - 1)
+    local offset = 0
+    for _, range in ipairs(ctx_ranges) do
+      clone_extmarks_into(extmarks, bufnr, range, offset)
+      offset = offset + util.get_range_height(range)
     end
     render_virtual_text(ctx_bufnr, extmarks)
     return
