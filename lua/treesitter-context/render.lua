@@ -192,7 +192,6 @@ end
 --- @return integer
 local function get_gutter_width(winid)
   return fn.getwininfo(winid)[1].textoff
-  -- return 8
 end
 
 ---@param name string
@@ -478,6 +477,9 @@ end
 --- @param ctx_lines string[]
 function M.open(bufnr, winid, ctx_ranges, ctx_lines, show_virt)
   local gutter_width = get_gutter_width(winid)
+  if vim.wo[winid].number and gutter_width <= #tostring(api.nvim_buf_line_count(bufnr)) then
+    return
+  end
   local win_width = math.max(1, api.nvim_win_get_width(winid) - gutter_width)
   local win_height = #ctx_lines
 
