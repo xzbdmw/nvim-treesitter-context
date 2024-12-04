@@ -305,7 +305,7 @@ function M.close_all()
     close(winid)
   end
 end
-local group = augroup('treesitter_context_update', {})
+local group = augroup('treesitter_context_update', { clear = true })
 
 ---@param event string|string[]
 ---@param callback fun(args: table)
@@ -316,8 +316,12 @@ local function autocmd(event, callback, opts)
   opts.group = group
   api.nvim_create_autocmd(event, opts)
 end
-
+local did_setup = false
 function M.enable()
+  if did_setup then
+    return
+  end
+  did_setup = true
   local cbuf = api.nvim_get_current_buf()
 
   attached[cbuf] = true
