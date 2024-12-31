@@ -91,7 +91,11 @@ local context_range = cache.memoize(function(node, query, bufnr)
 
     --- @cast match table<integer,TSNode>
 
-    for id, node0 in pairs(match) do
+    for id, nodes in pairs(match) do
+      --- In Nvim 0.9 node is a TSNode, in Nvim 0.10+ it is a list of TSNode
+      --- @type TSNode
+      local node0 = type(nodes) == 'table' and nodes[#nodes] or nodes
+
       local srow, scol, erow, ecol = node0:range()
 
       local name = query.captures[id] -- name of the capture in the query
