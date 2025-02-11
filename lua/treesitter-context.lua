@@ -118,7 +118,7 @@ local update = throttle(function()
 
   local active_win_view = vim.fn.winsaveview()
   local mode = vim.fn.mode()
-  if mode ~= 'n' and active_win_view.leftcol == 0 then
+  if mode == 'i' and active_win_view.leftcol == 0 then
     return
   end
 
@@ -277,7 +277,7 @@ M.update_virt = throttle(function()
   local bufnr = api.nvim_get_current_buf()
   local winid = api.nvim_get_current_win()
   local mode = vim.fn.mode()
-  if mode ~= 'n' then
+  if mode == "i" then
     return
   end
   if not can_open(bufnr, winid) then
