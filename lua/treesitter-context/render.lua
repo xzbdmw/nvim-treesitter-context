@@ -17,7 +17,7 @@ local function render_virtual_text(cbufnr, extmarks)
   for line = 0, len do
     for _, m_info in ipairs(extmarks[line] or {}) do
       local ns_id = m_info.opts['ns_id']
-      m_info.opts['id'] = ns_id
+      m_info.opts['id'] = nil
       m_info.opts['ns_id'] = nil
       local o = m_info.opts
       if o.priority >= 199 then
@@ -27,7 +27,7 @@ local function render_virtual_text(cbufnr, extmarks)
         o.virt_text_pos = 'overlay'
       end
 
-      local ok = pcall(api.nvim_buf_set_extmark, cbufnr, virt_text_ns, line, m_info.col, o)
+      api.nvim_buf_set_extmark(cbufnr, virt_text_ns, line, m_info.col, o)
     end
   end
 end
@@ -42,7 +42,11 @@ local function clone_extmarks_into(extmarks, bufnr, range, context_line_num)
     return
   end
   for name, n in pairs(api.nvim_get_namespaces()) do
-    if name == 'illuminate.highlight' or name == 'illuminate.highlightkeep' then
+    if
+      name == 'illuminate.highlight'
+      or name:find('flash') ~= nil
+      or name == 'illuminate.highlightkeep'
+    then
       local found_extmarks = api.nvim_buf_get_extmarks(
         bufnr,
         n,
@@ -140,7 +144,7 @@ end
 --- @param hl string
 --- @return integer
 local function display_window(bufnr, winid, float_winid, width, height, col, ty, hl)
-  local zindex = api.nvim_win_get_config(winid).relative ~= '' and 100 or config.zindex
+  local zindex = api.nvim_win_get_config(winid).relative ~= '' and 1002 or config.zindex
   if not float_winid or not api.nvim_win_is_valid(float_winid) then
     local sep = config.separator and { config.separator, 'TreesitterContextSeparator' } or nil
     float_winid = api.nvim_open_win(bufnr, false, {
@@ -455,7 +459,7 @@ end
 
 --- @param bufnr integer
 --- @param ctx_lines string[]
-local function illuminate_extmark(bufnr, ctx_bufnr, ctx_lines, ctx_ranges, show_virt)
+local function copy_extmark(bufnr, ctx_bufnr, ctx_lines, ctx_ranges, show_virt)
   if show_virt then
     if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_valid(ctx_bufnr) then
       return
@@ -486,7 +490,7 @@ function M.open(bufnr, winid, ctx_ranges, ctx_lines, show_virt)
   local window_context = store_context(bufnr, winid)
   local gbufnr, ctx_bufnr = window_context.gutter_bufnr, window_context.context_bufnr
 
-  illuminate_extmark(bufnr, ctx_bufnr, ctx_lines, ctx_ranges, show_virt)
+  copy_extmark(bufnr, ctx_bufnr, ctx_lines, ctx_ranges, show_virt)
   if config.line_numbers and (vim.wo[winid].number or vim.wo[winid].relativenumber) then
     -- Recreate buffer if user turn off line numbers and show it again
     if not api.nvim_buf_is_valid(gbufnr) then

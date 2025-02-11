@@ -1,5 +1,4 @@
 local api = vim.api
-local success, indent_mod = pcall(require, 'hlchunk.mods.indent')
 
 local config = require('treesitter-context.config')
 
@@ -403,8 +402,20 @@ local function init()
   api.nvim_set_hl(0, 'TreesitterContextSeparator', { link = 'FloatBorder', default = true })
 end
 
-local did_init = false
+M.update_extmark = function()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local winid = vim.api.nvim_get_current_win()
+  local context, context_lines = require('treesitter-context.context').get(bufnr, winid)
+  if not context or #context == 0 then
+    return
+  end
+  if vim.w[winid].gitsigns_preview then
+    return
+  end
+  require('treesitter-context.render').open(bufnr, winid, context, context_lines, true)
+end
 
+local did_init = false
 ---@param options? TSContext.UserConfig
 function M.setup(options)
   if options then
